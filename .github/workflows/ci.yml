@@ -1,0 +1,62 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  cpp:
+    strategy:
+      matrix: { os: [ubuntu-latest, macos-latest] }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build -j
+      - run: ctest --test-dir build --output-on-failure
+      - run: ./build/lob_cli data/sample_orders.csv
+
+  sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DLOB_SANITIZE=ON -DLOB_BUILD_BENCH=OFF
+      - run: cmake --build build -j
+      - run: ./build/lob_tests
+
+  mutation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/mutation_check.sh
+
+  python:
+    strategy:
+      matrix: { python: ["3.9", "3.10", "3.11", "3.12"] }
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ matrix.python }}" }
+      - run: pip install ".[dev]"
+      - run: python -m pytest -q
+
+  python-pure:           # no compiler involved: the toolkit must work without the C++ extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install numpy pytest
+      - run: PYTHONPATH=python python -m pytest -q
+
+  r-and-sql:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: r-lib/actions/setup-r@v2
+      - run: pip install ".[analysis]"
+      - run: python -m lob simulate --steps 5000 --out results --sqlite
+      - run: python -m lob sql results/lob.sqlite
+      - run: Rscript r/analyze.R results

@@ -1,0 +1,13 @@
+side,type,price,quantity,tif
+Buy,limit,10000,10,GTC
+Buy,limit,9995,5,GTC
+Buy,limit,9990,20,GTC
+Sell,limit,10010,8,GTC
+Sell,limit,10015,12,GTC
+Sell,limit,10020,15,GTC
+Buy,limit,10005,7,GTC
+Sell,limit,10000,3,GTC
+Buy,limit,10015,15,IOC
+Sell,market,,12,IOC
+Buy,limit,10030,100,FOK
+Buy,limit,10010,9,GTC

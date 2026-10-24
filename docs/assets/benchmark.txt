@@ -1,0 +1,21 @@
+lob benchmark | ops/workload=2000000 reps=5 | clock-read overhead subtracted: 26 ns
+
+== tight   (mean offset 4 ticks, 30% cancel)
+   final state: 491499 resting, 406369 trades | implementations agree: yes
+                    Mops/s   speedup   limit p50/p99 (ns)     cancel p50/p99 (ns)    market p50/p99 (ns)   
+   OrderBook          5.87     23.1x         28 / 467              406 / 914              196 / 856        
+   ReferenceBook      0.25      1.0x        140 / 1271            4937 / 82238            426 / 2450       
+
+== deep    (mean offset 60 ticks, 30% cancel)
+   final state: 460393 resting, 454114 trades | implementations agree: yes
+                    Mops/s   speedup   limit p50/p99 (ns)     cancel p50/p99 (ns)    market p50/p99 (ns)   
+   OrderBook          6.26      4.4x         36 / 365              409 / 904              142 / 564        
+   ReferenceBook      1.41      1.0x        167 / 929             1403 / 6835             181 / 1581       
+
+== churn   (mean offset 15 ticks, 40% cancel)
+   final state: 207929 resting, 309048 trades | implementations agree: yes
+                    Mops/s   speedup   limit p50/p99 (ns)     cancel p50/p99 (ns)    market p50/p99 (ns)   
+   OrderBook         10.54      9.2x         28 / 310              256 / 806              113 / 559        
+   ReferenceBook      1.14      1.0x        121 / 815             1323 / 7518             186 / 1708       
+
+wrote docs/assets/benchmark.json

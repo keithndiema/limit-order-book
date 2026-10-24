@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>lob live</title>
+<style>
+:root{--bg:#f5f6f9;--card:#ffffff;--fg:#1b1f29;--mute:#7a8396;--line:#e3e6ee;--bid:#2e9e6b;--ask:#d6455d;--acc:#3b6fd4}
+@media(prefers-color-scheme:dark){:root{--bg:#0e1117;--card:#161b24;--fg:#e6e9f0;--mute:#8590a6;--line:#252c3a}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:13px system-ui,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+header h1{font-size:15px;margin:0 8px 0 0}.pill{background:var(--card);border:1px solid var(--line);border-radius:99px;padding:3px 10px;color:var(--mute)}
+.pill b{color:var(--fg);font-variant-numeric:tabular-nums}.sp{flex:1}
+button,select,input{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:6px;padding:4px 8px}
+button{cursor:pointer}button.p{background:var(--acc);border-color:var(--acc);color:#fff}
+main{display:grid;grid-template-columns:270px 1fr 230px;gap:10px;padding:10px;align-items:start}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.c{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:10px}
+h4{margin:0 0 8px;font-size:12px;color:var(--mute);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+h4 small{text-transform:none;letter-spacing:0;font-weight:400}
+.r{position:relative;display:flex;justify-content:space-between;padding:2px 8px;font-variant-numeric:tabular-nums;cursor:pointer}
+.r:hover{outline:1px solid var(--line)}.r i{position:absolute;right:0;top:0;bottom:0;opacity:.2}
+.r.ask i{background:var(--ask)}.r.bid i{background:var(--bid)}.r b,.r span{position:relative}
+.bid{color:var(--bid)}.ask{color:var(--ask)}.r span{color:var(--fg)}
+.mid{text-align:center;color:var(--mute);padding:5px;border-block:1px solid var(--line);margin:3px 0}
+canvas{width:100%;height:170px;display:block}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:10px}
+.cards .c{margin:0}.cards h3{margin:4px 0;font-size:22px;font-variant-numeric:tabular-nums}.cards small{color:var(--mute)}
+.t{display:flex;justify-content:space-between;font-variant-numeric:tabular-nums;padding:1px 0}.t span{color:var(--mute)}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}.form input,.form select{width:100%}
+.form .buy{background:var(--bid);color:#fff;border-color:var(--bid)}.form .sell{background:var(--ask);color:#fff;border-color:var(--ask)}
+#msg{grid-column:1/-1;color:var(--mute);min-height:1.2em}
+</style></head><body>
+<header>
+  <h1>lob live</h1>
+  <span class="pill">engine <b id="bk">–</b></span><span class="pill">step <b id="step">0</b></span>
+  <span class="pill">mid <b id="mid">–</b></span><span class="pill">spread <b id="spr">–</b></span>
+  <span class="pill">microprice <b id="mp">–</b></span><span class="sp"></span>
+  <button id="pp" class="p">Pause</button>
+  <select id="sp" title="steps per tick"><option value="1">1x</option><option value="5">5x</option><option value="20">20x</option><option value="100">100x</option></select>
+  <select id="strat"><option value="both">both MMs</option><option value="fixed">fixed spread</option><option value="as">Avellaneda-Stoikov</option><option value="none">no MM</option></select>
+  <input id="seed" type="number" value="42" style="width:80px" title="seed"><button id="rs">Reset</button>
+</header>
+<main>
+  <section>
+    <div class="c"><h4>Order book <small>· click a price</small></h4><div id="lad"></div>
+      <div class="form">
+        <select id="ty"><option value="limit">limit</option><option value="market">market</option></select>
+        <input id="pr" type="number" placeholder="price"><input id="qt" type="number" value="10" min="1" placeholder="qty">
+        <span></span><button id="buy" class="buy">Buy</button><button id="sell" class="sell">Sell</button><div id="msg"></div>
+      </div></div>
+  </section>
+  <section>
+    <div id="cards" class="cards"></div>
+    <div class="c"><h4>Price <small>· <span style="color:var(--acc)">book mid</span> vs <span>fundamental</span></small></h4><canvas id="px"></canvas></div>
+    <div class="c"><h4>Cumulative depth</h4><canvas id="dp"></canvas></div>
+    <div class="c"><h4>Mark-to-mid PnL</h4><canvas id="pl"></canvas></div>
+  </section>
+  <section class="c"><h4>Trades</h4><div id="tape"></div></section>
+</main>
+<script>
+const $=id=>document.getElementById(id),css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt=(x,d=1)=>x==null?'–':x.toFixed(d),PC=['#e08a1e','#8a5cf5','#2e9e6b','#d6455d'];
+let S=null,init=false;
+const post=async(u,b)=>(await fetch(u,{method:'POST',body:JSON.stringify(b)})).json();
+function cv(el){const r=devicePixelRatio||1,w=el.clientWidth,h=el.clientHeight;el.width=w*r;el.height=h*r;
+  const g=el.getContext('2d');g.scale(r,r);g.font='11px system-ui';return[g,w,h]}
+function line(el,ss){const[g,w,h]=cv(el),L=40,v=ss.flatMap(s=>s.d).filter(x=>x!=null);if(v.length<2)return;
+  let lo=Math.min(...v),hi=Math.max(...v);if(hi==lo){hi++;lo--}
+  g.fillStyle=css('--mute');g.fillText(hi.toFixed(0),0,10);g.fillText(lo.toFixed(0),0,h-2);
+  ss.forEach(s=>{g.beginPath();g.strokeStyle=s.c;g.lineWidth=1.5;let on=0;
+    s.d.forEach((y,i)=>{if(y==null){on=0;return}const x=L+i/(s.d.length-1)*(w-L),py=h-4-(y-lo)/(hi-lo)*(h-16);on?g.lineTo(x,py):g.moveTo(x,py);on=1});g.stroke()})}
+function depth(el,b,a){const[g,w,h]=cv(el);if(!b.length||!a.length)return;
+  const acc=ls=>{let s=0;return ls.map(l=>[l[0],s+=l[1]])},cb=acc(b),ca=acc(a);
+  const x0=cb.at(-1)[0],x1=ca.at(-1)[0],m=Math.max(cb.at(-1)[1],ca.at(-1)[1]),X=p=>(p-x0)/(x1-x0||1)*w,Y=q=>h-2-q/m*(h-14);
+  [[cb,'--bid'],[ca,'--ask']].forEach(([c,k])=>{g.beginPath();g.moveTo(X(c[0][0]),h);c.forEach(([p,q])=>g.lineTo(X(p),Y(q)));
+    g.lineTo(X(c.at(-1)[0]),h);g.closePath();g.fillStyle=css(k)+'44';g.fill();g.strokeStyle=css(k);g.stroke()})}
+function draw(){
+  $('bk').textContent=S.backend;$('step').textContent=S.step;$('mid').textContent=fmt(S.mid);
+  $('spr').textContent=S.spread??'–';$('mp').textContent=fmt(S.microprice,2);$('pp').textContent=S.running?'Pause':'Play';
+  if(!init){init=true;$('sp').value=S.speed;$('strat').value=S.strategy;$('seed').value=S.seed}
+  const mx=Math.max(1,...S.bids.concat(S.asks).map(l=>l[1])),
+    row=(l,c)=>`<div class="r ${c}" data-p="${l[0]}"><i style="width:${l[1]/mx*100}%"></i><b>${l[0]}</b><span>${l[1]}</span></div>`;
+  $('lad').innerHTML=S.asks.slice(0,12).reverse().map(l=>row(l,'ask')).join('')+
+    `<div class="mid">mid ${fmt(S.mid)} · spread ${S.spread??'–'}</div>`+S.bids.slice(0,12).map(l=>row(l,'bid')).join('');
+  const h=S.hist;line($('px'),[{d:h.fund,c:css('--mute')},{d:h.mid,c:css('--acc')}]);
+  line($('pl'),Object.keys(h.pnl).map((k,i)=>({d:h.pnl[k],c:PC[i%4]})));depth($('dp'),S.bids,S.asks);
+  $('tape').innerHTML=S.tape.slice(-22).reverse().map(t=>`<div class="t ${t[3]?'ask':'bid'}"><span>${t[0]}</span><b>${t[1]}</b><span>${t[2]}</span></div>`).join('');
+  $('cards').innerHTML=S.cards.map((c,i)=>`<div class="c"><span style="color:${PC[i%4]}">●</span> ${c.name}
+    <h3 class="${c.pnl>=0?'bid':'ask'}">${c.pnl.toFixed(0)}</h3><small>inv ${c.inv} · fills ${c.fills}</small></div>`).join('')}
+async function tick(){try{S=await(await fetch('/api/state')).json();draw()}catch(e){$('bk').textContent='offline'}setTimeout(tick,120)}
+const ctl=b=>post('/api/control',b);
+$('pp').onclick=()=>ctl({action:S.running?'pause':'play'});
+$('sp').onchange=e=>ctl({action:'speed',speed:+e.target.value});
+$('rs').onclick=()=>ctl({action:'reset',seed:+$('seed').value,strategy:$('strat').value});
+$('lad').onclick=e=>{const r=e.target.closest('.r');if(r)$('pr').value=r.dataset.p};
+const send=side=>async()=>{const r=await post('/api/order',{side,type:$('ty').value,price:+$('pr').value,qty:+$('qt').value});
+  $('msg').textContent=r.error||(r.accepted?`${side}: filled ${r.filled}, left ${r.remaining}`:'rejected: '+r.reject)};
+$('buy').onclick=send('buy');$('sell').onclick=send('sell');
+tick();
+</script></body></html>

@@ -1,0 +1,10 @@
+build*/
+results/
+*.so
+*.pyd
+__pycache__/
+*.egg-info/
+.pytest_cache/
+dist/
+.venv/
+compile_commands.json

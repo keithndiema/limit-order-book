@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=64", "wheel", "pybind11>=2.11"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lob-engine"
+version = "1.0.0"
+description = "Fast limit order book & matching engine (C++17) with Python simulation, Avellaneda-Stoikov market making, SQL and R analytics"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Keith Ndiema" }]
+keywords = ["limit-order-book", "matching-engine", "market-microstructure", "market-making", "quant", "trading", "cpp", "pybind11"]
+classifiers = [
+  "Programming Language :: C++",
+  "Programming Language :: Python :: 3",
+  "Topic :: Office/Business :: Financial :: Investment",
+  "Intended Audience :: Financial and Insurance Industry",
+  "License :: OSI Approved :: MIT License",
+]
+dependencies = ["numpy>=1.22"]
+
+[project.optional-dependencies]
+analysis = ["pandas>=1.5", "matplotlib>=3.5"]
+dev = ["pytest>=7", "pandas>=1.5", "matplotlib>=3.5"]
+
+[project.scripts]
+lob = "lob.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["python"]
+
+[tool.setuptools.package-dir]
+"" = "python"
+
+[tool.pytest.ini_options]
+testpaths = ["python/tests"]
+
+[tool.setuptools.package-data]
+lob = ["sql/*.sql", "sql/queries/*.sql", "static/*.html"]
