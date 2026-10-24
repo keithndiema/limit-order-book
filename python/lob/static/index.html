@@ -8,6 +8,9 @@
 header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
 header h1{font-size:15px;margin:0 8px 0 0}.pill{background:var(--card);border:1px solid var(--line);border-radius:99px;padding:3px 10px;color:var(--mute)}
 .pill b{color:var(--fg);font-variant-numeric:tabular-nums}.sp{flex:1}
+.lv{display:none}.live .lv{display:inline-block}.live .sim{display:none!important}
+.live h1::after{content:"LIVE";margin-left:8px;font-size:10px;background:var(--ask);color:#fff;border-radius:4px;padding:1px 5px;vertical-align:2px}
+.warn{color:var(--ask)!important}
 button,select,input{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:6px;padding:4px 8px}
 button{cursor:pointer}button.p{background:var(--acc);border-color:var(--acc);color:#fff}
 main{display:grid;grid-template-columns:270px 1fr 230px;gap:10px;padding:10px;align-items:start}
@@ -23,48 +26,50 @@ h4 small{text-transform:none;letter-spacing:0;font-weight:400}
 canvas{width:100%;height:170px;display:block}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:10px}
 .cards .c{margin:0}.cards h3{margin:4px 0;font-size:22px;font-variant-numeric:tabular-nums}.cards small{color:var(--mute)}
-.t{display:flex;justify-content:space-between;font-variant-numeric:tabular-nums;padding:1px 0}.t span{color:var(--mute)}
+.t{display:flex;justify-content:space-between;gap:8px;font-variant-numeric:tabular-nums;padding:1px 0}.t span{color:var(--mute)}
 .form{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}.form input,.form select{width:100%}
 .form .buy{background:var(--bid);color:#fff;border-color:var(--bid)}.form .sell{background:var(--ask);color:#fff;border-color:var(--ask)}
 #msg{grid-column:1/-1;color:var(--mute);min-height:1.2em}
 </style></head><body>
 <header>
-  <h1>lob live</h1>
-  <span class="pill">engine <b id="bk">–</b></span><span class="pill">step <b id="step">0</b></span>
+  <h1>lob</h1>
+  <span class="pill sim">engine <b id="bk">–</b></span><span class="pill lv">feed <b id="src">–</b></span>
+  <span class="pill">step <b id="step">0</b></span>
   <span class="pill">mid <b id="mid">–</b></span><span class="pill">spread <b id="spr">–</b></span>
   <span class="pill">microprice <b id="mp">–</b></span><span class="sp"></span>
   <button id="pp" class="p">Pause</button>
-  <select id="sp" title="steps per tick"><option value="1">1x</option><option value="5">5x</option><option value="20">20x</option><option value="100">100x</option></select>
-  <select id="strat"><option value="both">both MMs</option><option value="fixed">fixed spread</option><option value="as">Avellaneda-Stoikov</option><option value="none">no MM</option></select>
-  <input id="seed" type="number" value="42" style="width:80px" title="seed"><button id="rs">Reset</button>
+  <select id="sp" class="sim" title="steps per tick"><option value="1">1x</option><option value="5">5x</option><option value="20">20x</option><option value="100">100x</option></select>
+  <select id="strat" class="sim"><option value="both">both MMs</option><option value="fixed">fixed spread</option><option value="as">Avellaneda-Stoikov</option><option value="none">no MM</option></select>
+  <input id="seed" class="sim" type="number" value="42" style="width:80px" title="seed"><button id="rs" class="sim">Reset</button>
 </header>
 <main>
   <section>
-    <div class="c"><h4>Order book <small>· click a price</small></h4><div id="lad"></div>
-      <div class="form">
+    <div class="c"><h4>Order book <small class="sim">· click a price</small></h4><div id="lad"></div>
+      <div class="form sim">
         <select id="ty"><option value="limit">limit</option><option value="market">market</option></select>
         <input id="pr" type="number" placeholder="price"><input id="qt" type="number" value="10" min="1" placeholder="qty">
         <span></span><button id="buy" class="buy">Buy</button><button id="sell" class="sell">Sell</button><div id="msg"></div>
       </div></div>
   </section>
   <section>
-    <div id="cards" class="cards"></div>
-    <div class="c"><h4>Price <small>· <span style="color:var(--acc)">book mid</span> vs <span>fundamental</span></small></h4><canvas id="px"></canvas></div>
+    <div id="cards" class="cards sim"></div>
+    <div class="c"><h4>Price <small>· <span style="color:var(--acc)">book mid</span> vs <span id="l2">fundamental</span></small></h4><canvas id="px"></canvas></div>
     <div class="c"><h4>Cumulative depth</h4><canvas id="dp"></canvas></div>
-    <div class="c"><h4>Mark-to-mid PnL</h4><canvas id="pl"></canvas></div>
+    <div class="c sim"><h4>Mark-to-mid PnL</h4><canvas id="pl"></canvas></div>
   </section>
-  <section class="c"><h4>Trades</h4><div id="tape"></div></section>
+  <section class="c"><h4>Trades <small class="lv">· UTC</small></h4><div id="tape"></div></section>
 </main>
 <script>
 const $=id=>document.getElementById(id),css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const fmt=(x,d=1)=>x==null?'–':x.toFixed(d),PC=['#e08a1e','#8a5cf5','#2e9e6b','#d6455d'];
-let S=null,init=false;
+let S=null,init=false,D=0;
 const post=async(u,b)=>(await fetch(u,{method:'POST',body:JSON.stringify(b)})).json();
+const qf=q=>S.live?+q.toFixed(4):q;
 function cv(el){const r=devicePixelRatio||1,w=el.clientWidth,h=el.clientHeight;el.width=w*r;el.height=h*r;
   const g=el.getContext('2d');g.scale(r,r);g.font='11px system-ui';return[g,w,h]}
-function line(el,ss){const[g,w,h]=cv(el),L=40,v=ss.flatMap(s=>s.d).filter(x=>x!=null);if(v.length<2)return;
-  let lo=Math.min(...v),hi=Math.max(...v);if(hi==lo){hi++;lo--}
-  g.fillStyle=css('--mute');g.fillText(hi.toFixed(0),0,10);g.fillText(lo.toFixed(0),0,h-2);
+function line(el,ss){const[g,w,h]=cv(el),L=52,v=ss.flatMap(s=>s.d).filter(x=>x!=null);if(v.length<2)return;
+  let lo=Math.min(...v),hi=Math.max(...v);if(hi==lo){hi+=1e-9;lo-=1e-9}
+  g.fillStyle=css('--mute');g.fillText(hi.toFixed(D),0,10);g.fillText(lo.toFixed(D),0,h-2);
   ss.forEach(s=>{g.beginPath();g.strokeStyle=s.c;g.lineWidth=1.5;let on=0;
     s.d.forEach((y,i)=>{if(y==null){on=0;return}const x=L+i/(s.d.length-1)*(w-L),py=h-4-(y-lo)/(hi-lo)*(h-16);on?g.lineTo(x,py):g.moveTo(x,py);on=1});g.stroke()})}
 function depth(el,b,a){const[g,w,h]=cv(el);if(!b.length||!a.length)return;
@@ -73,19 +78,21 @@ function depth(el,b,a){const[g,w,h]=cv(el);if(!b.length||!a.length)return;
   [[cb,'--bid'],[ca,'--ask']].forEach(([c,k])=>{g.beginPath();g.moveTo(X(c[0][0]),h);c.forEach(([p,q])=>g.lineTo(X(p),Y(q)));
     g.lineTo(X(c.at(-1)[0]),h);g.closePath();g.fillStyle=css(k)+'44';g.fill();g.strokeStyle=css(k);g.stroke()})}
 function draw(){
-  $('bk').textContent=S.backend;$('step').textContent=S.step;$('mid').textContent=fmt(S.mid);
-  $('spr').textContent=S.spread??'–';$('mp').textContent=fmt(S.microprice,2);$('pp').textContent=S.running?'Pause':'Play';
+  D=S.live?S.dec:0;document.body.classList.toggle('live',!!S.live);
+  $('bk').textContent=S.backend;$('step').textContent=S.step;$('mid').textContent=fmt(S.mid,S.live?D:1);
+  $('spr').textContent=fmt(S.spread,D);$('mp').textContent=fmt(S.microprice,S.live?D:2);$('pp').textContent=S.running?'Pause':'Play';
+  if(S.live){const e=$('src');e.textContent=S.err?'error: '+S.err:`${S.source} ${S.symbol} · ${S.latency??'–'} ms`;e.classList.toggle('warn',!!S.err);$('l2').textContent='microprice'}
   if(!init){init=true;$('sp').value=S.speed;$('strat').value=S.strategy;$('seed').value=S.seed}
-  const mx=Math.max(1,...S.bids.concat(S.asks).map(l=>l[1])),
-    row=(l,c)=>`<div class="r ${c}" data-p="${l[0]}"><i style="width:${l[1]/mx*100}%"></i><b>${l[0]}</b><span>${l[1]}</span></div>`;
+  const mx=Math.max(1e-9,...S.bids.concat(S.asks).map(l=>l[1])),
+    row=(l,c)=>`<div class="r ${c}" data-p="${l[0]}"><i style="width:${l[1]/mx*100}%"></i><b>${l[0].toFixed(D)}</b><span>${qf(l[1])}</span></div>`;
   $('lad').innerHTML=S.asks.slice(0,12).reverse().map(l=>row(l,'ask')).join('')+
-    `<div class="mid">mid ${fmt(S.mid)} · spread ${S.spread??'–'}</div>`+S.bids.slice(0,12).map(l=>row(l,'bid')).join('');
+    `<div class="mid">mid ${fmt(S.mid,S.live?D:1)} · spread ${fmt(S.spread,D)}</div>`+S.bids.slice(0,12).map(l=>row(l,'bid')).join('');
   const h=S.hist;line($('px'),[{d:h.fund,c:css('--mute')},{d:h.mid,c:css('--acc')}]);
   line($('pl'),Object.keys(h.pnl).map((k,i)=>({d:h.pnl[k],c:PC[i%4]})));depth($('dp'),S.bids,S.asks);
-  $('tape').innerHTML=S.tape.slice(-22).reverse().map(t=>`<div class="t ${t[3]?'ask':'bid'}"><span>${t[0]}</span><b>${t[1]}</b><span>${t[2]}</span></div>`).join('');
+  $('tape').innerHTML=S.tape.slice(-22).reverse().map(t=>`<div class="t ${t[3]?'ask':'bid'}"><span>${t[0]}</span><b>${t[1].toFixed(D)}</b><span>${qf(t[2])}</span></div>`).join('');
   $('cards').innerHTML=S.cards.map((c,i)=>`<div class="c"><span style="color:${PC[i%4]}">●</span> ${c.name}
     <h3 class="${c.pnl>=0?'bid':'ask'}">${c.pnl.toFixed(0)}</h3><small>inv ${c.inv} · fills ${c.fills}</small></div>`).join('')}
-async function tick(){try{S=await(await fetch('/api/state')).json();draw()}catch(e){$('bk').textContent='offline'}setTimeout(tick,120)}
+async function tick(){try{S=await(await fetch('/api/state')).json();draw()}catch(e){$('bk').textContent='offline'}setTimeout(tick,S&&S.live?500:120)}
 const ctl=b=>post('/api/control',b);
 $('pp').onclick=()=>ctl({action:S.running?'pause':'play'});
 $('sp').onchange=e=>ctl({action:'speed',speed:+e.target.value});
