@@ -165,12 +165,24 @@ def _handler(sess: Session):
     return Handler
 
 
+def _bind(host: str, port: int, handler, tries: int = 20) -> ThreadingHTTPServer:
+    """Bind to `port`, or the next free one (fixes 'Address already in use')."""
+    for p in range(port, port + tries):
+        try:
+            return ThreadingHTTPServer((host, p), handler)
+        except OSError as e:
+            if e.errno not in (98, 48, 10048):  # EADDRINUSE on Linux / macOS / Windows
+                raise
+    raise OSError(f"no free port in {port}-{port + tries - 1}; pass --port")
+
+
 def serve(host: str = "127.0.0.1", port: int = 8000, seed: int = 42, strategy: str = "both",
           backend: str = "auto") -> None:
     sess = Session(seed, strategy, backend)
+    httpd = _bind(host, port, _handler(sess))
     threading.Thread(target=sess.loop, daemon=True).start()
-    httpd = ThreadingHTTPServer((host, port), _handler(sess))
-    print(f"lob dashboard ({sess.sim.backend} backend): http://{host}:{port}   (Ctrl-C to stop)")
+    note = "" if httpd.server_address[1] == port else f"  (port {port} was busy)"
+    print(f"lob dashboard ({sess.sim.backend} backend): http://{host}:{httpd.server_address[1]}{note}   (Ctrl-C to stop)")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
